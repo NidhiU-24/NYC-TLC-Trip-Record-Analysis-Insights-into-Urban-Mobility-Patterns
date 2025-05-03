@@ -1,0 +1,1071 @@
+---
+title: "DA5020 PRACTICUM 3"
+subtitle: "Members"
+author: "Deepali Krishna Kashyap, Jan Mollet, Kanchan Sadashiv Deore, Nidhi Nityanand Uchil, Shamitha K V, Yochana Boddepalli"
+date: "2025-04-16"
+output:
+  html_document:
+    code_folding: hide
+    theme: cerulean
+---
+<!-- Custom CSS for styling -->
+<style>
+  h1 {
+    text-align: center;
+    color: #1F53B4;font-weight: bold;/* Change this to your preferred color for the title */
+  }
+  h3.subtitle {
+    text-align: center;
+    color: #1F76B4;font-weight: bold; /* Change this to your preferred color for the subtitle */
+  }
+  .author {
+    text-align: center;
+    color: #008080;font-weight: bold; /* Change this to your preferred color for the author */
+  }
+  .date {
+    text-align: center;
+    color: #003636;font-weight: bold; /* Change this to your preferred color for the date */
+  }
+</style>
+
+
+
+
+<h2 style="color: #e6880f;">
+**Loading Libraries**
+</h2>
+
+```{r load libraries}
+library(tidyverse)
+library(lubridate)
+library(XML)
+library(dplyr)
+library(stringr)
+library(tidyr)  
+library(ggplot2)
+library(psych)
+library(caret)
+library(reshape2)
+```
+
+
+<h2 style="color: #1F53B4;">
+**Question 1 — (20 points) + 10 optional points: DATA UNDERSTANDING**
+</h2>
+
+
+
+```{r}
+#Creating the data frame tripdata_df where we will store all the data coming from the ".csv" file.
+tripdata_df <- read.csv("P3smaller.csv")
+#We use the class() function to check if "tripdata_df" is a data frame.
+head(tripdata_df)
+
+
+# The function summary() returns the statistics values of the data frame as for example the minimum of the row, the maximum, mean...Is very useful when we want to know certain information about a variable. We can also get the "Not Available"(NA) data per each row. 
+summary(tripdata_df)
+
+glimpse(tripdata_df)
+
+```
+
+```{r}
+# Looking at the levels of each of the variables
+payment_levels <- tripdata_df %>%
+  pull(payment_type) %>%
+  unique()
+
+payment_levels
+
+RateCODE_levels <- tripdata_df %>%
+  pull(RatecodeID) %>%
+  unique()
+
+RateCODE_levels
+
+PULocationID_levels <- tripdata_df %>%
+  pull(PULocationID) %>%
+  unique()
+
+Locations <- tripdata_df %>%
+  count(PULocationID)
+
+head(Locations)
+
+```
+
+
+
+**In order to speed things up and don't have to deal with a large data set that would be difficult to process for the KNNW regression model, We have decided to use the smaller data set. First of all, we have stored the data into the tripdata_df (data frame) to be able to use some functions and understand the data (1st and 2nd phase in the CrIsp-DM). The tripdata_df has 3986 rows (observations) and 20 columns (features/variables). Within the data frame we have different types of data such as integers and characters.**
+
+
+
+Let's first do a summary of each of the variables to understand what they mean and their data type. Will we have to change the data type of some of the variables?
+
+**VendorID:** Code for the provider: 
+
+    1 = Creative Mobile Technologies, LLC
+
+    2 = Curb Mobility, LLC
+
+    6 = Myle Technologies Inc
+
+**lpep_pickup_datetime:** Date and time when the meter was engaged.
+
+**lpep_dropoff_datetime:** Date and time when the meter was disengaged.
+
+**store_and_fwd_flag:** Indicates if the trip was stored before forwarding due to no server connection.
+
+**RatecodeID:** Final rate code for the trip: 
+
+    1 = Standard
+
+    2 = JFK
+
+    3 = Newark
+
+    4 = Nassau or Westchester
+
+    5 = Negotiated fare
+
+    6 = Group ride
+
+    99 = Null/unknown
+
+**PULocationID:** Pickup TLC Taxi Zone. 
+
+**DOLocationID:** Drop-off TLC Taxi Zone. 
+
+**passenger_count:** Number of passengers. 
+
+**trip_distance:** Trip distance in miles.
+
+**fare_amount:** Meter-calculated time-and-distance fare.
+
+**extra:** Additional charges and surcharges.
+
+**mta_tax:** Automatic tax based on the rate in use.
+
+**tip_amount:** Tip amount (credit card tips only; cash tips excluded).
+
+**tolls_amount:** Total tolls paid during the trip.
+
+**improvement_surcharge:** Extra charge added at the flag drop since 2015.
+
+**total_amount:** Total charged (excluding cash tips).
+
+**payment_type:** How the passenger paid: 
+
+    0 = Flex Fare
+
+    1 = Credit card
+
+    2 = Cash
+
+    3 = No charge
+
+    4 = Dispute
+
+    5 = Unknown
+
+    6 = Voided trip
+
+**trip_type:** How the trip was initiated: 
+
+    1 = Street-hail
+
+    2 = Dispatch
+
+**congestion_surcharge:** NYS congestion surcharge amount. 
+
+**cbd_congestion_fee:** MTA congestion zone fee.
+
+
+
+
+```{r}
+
+na_counts_df <- data.frame(
+  Variable = names(tripdata_df),
+  Missing_Values = colSums(is.na(tripdata_df))
+)
+```
+
+**We will have to take a look to the variables that contain missing values to decide what we will do, completely remove the rows? Compute some values from the mean or the median to lose less data? In step number two will handle with all of this but for now, we can have a clear visualization of the variables that we will focus on. For example, the "ehails_fee" column can be removed since it contains NA values within all the data frame.** 
+
+
+```{r}
+# By creating this data frame we can summarize the data types of the variables, the data type that should be and the reason why.
+data_type <- data.frame(
+  Variable = names(tripdata_df),
+  Type = sapply(tripdata_df, class),
+  Transform_to = c("factor", "POSIXct datetime object", "POSIXct datetime object", "factor", "factor", "Integer (SAME)", "Integer (SAME)", "Integer (SAME)", "Numeric (SAME)", 
+  "Numeric (SAME)", "Numeric (SAME)", "Numeric (SAME)", "Numeric (SAME)", "Numeric (SAME)", "NO TRANSFORMATION REMOVE DIRECTLY", "Numeric (SAME)", "Numeric (SAME)", "factor", "factor", "Numeric (SAME)" ),
+  Reason = c(  "Categorical provider ID", "Pickup timestamp","Dropoff timestamp", "Yes/No flag", "Categorical rate code", "Location ID (integer)", "Location ID (integer)", "Passenger count", "Distance in miles", "Fare in USD", "Additional charges", "MTA tax in USD", "Tip in USD (target variable)", "Tolls in USD", "Surcharge in USD", "Column not needed (no values)", "Total trip charge (numeric)", "Payment method (categorical)", "Trip type (categorical)", "Congestion charge")
+  
+)
+
+data_type
+
+# In other words, this will be the columns that we will have to change 
+
+data_type_2 <- data_type %>%
+  select(Variable)%>%
+  filter(Variable %in% Variable[c(1, 2, 3, 4, 5, 18, 19)])
+
+data_type_2
+```
+
+**In order to apply KNN, all variables need to be in a numeric data type. Nevertheless, it’s a good start to perform an initial transformation of the data types, as shown in the table above, to understand what we are working with. However, at some point, we will need to convert all categorical variables (factors) into dummy variables using N − 1 level binary encoding to apply the regression model. One approach for handling date variables is to extract the year, month, day, and time (for both pickup and drop-off times) into separate columns. This will allow us to better observe distributions and interact with the data more effectively. Additionally, there may be some variables that we choose not to include in the model for predicting tip amount, as they may not be good predictors.**
+
+```{r}
+# Variables that won't have an effect in the tip amount for sure
+
+Not_good_indicator <- c("VendorID", "store_and_fwd_flag", "ehail_fee", "RateCodeID", "PULocationID", "DOLocationID", "lpep_pickup_datetime", "lpep_dropoff_datetime")
+
+Reason <- c("Won't affect the tip amount, is the provider of the code", "Record information" ,"It doesn't contain any values", "It's a categorical variavle that doesn't give us a lot of information", "Is just a location code (Create New Feature)", "Is just a location code (Create new feature)", "Even though the variable gives a lot of information, we have converted and extracted information from it, we don't need it", "Even though the variable gives a lot of information, we have converted and extracted information from it, we don't need it")
+
+Remove_data <- data.frame(Not_good_indicator, Reason)
+
+Remove_data
+```
+
+<h5 style="color: #e6880f;">
+**FEATURE ENGINEERING:**
+</h5>
+
+**We were able to get all the Locations from the online table at the "Taxi & Limousine Commision". With that we have first of all imported the data and cleaned up (it was very messy and nested). After that, we have transformed the ID to an integer. We have done some research by borough and zone to gather the average anual salary in each of the zones. This can be a good indicator to predict the tip amount. Even though we don't know the economic situation of each of the passengers, it can give us a good estimate. Finally, we joined the location tables to the taxis dataset and added the average salary for each borough. We used ggplot to visualize the counts of tips that are greater than 0 for each of the boroughs. These can be very important variables to predict the tip amount because each borough has a different socioeconomic status.**
+
+```{r}
+locations_df <- read_delim("taxi_zone_lookup.csv", delim = ",", col_names = FALSE)
+# Split the single column into multiple columns by commas
+locations_df <- locations_df %>%
+  separate(
+    col = X1, 
+    into = c("LocationID", "Borough", "Zone", "service_zone"), 
+    sep = ",", 
+    remove = TRUE,  # Remove the original column X1
+  )
+
+# Remove any extra quotes if present
+locations_df <- locations_df %>%
+  mutate(across(everything(), ~ gsub('"', '', .)))
+
+# View the cleaned data
+locations_df <- locations_df[-1,]
+locations_df$LocationID <- as.integer(locations_df$LocationID)
+
+
+# Add a new column 'Average_Household_Income' based on the borough
+locations_df <- locations_df %>%
+  mutate(Average_Household_Income = case_when(
+    Borough == "Manhattan" ~ 175743,
+    Borough == "Brooklyn" ~ 115625,
+    Borough == "Queens" ~ 106667,
+    Borough == "Bronx" ~ 66878,
+    Borough == "Staten Island" ~ 119550,
+    TRUE ~ NA_real_  # Assign NA if borough doesn't match any listed
+  ))
+
+# View the updated dataframe with the new column
+locations_df <- locations_df%>%
+  select(-Zone, -service_zone)
+
+head(locations_df)
+
+tripdata_df_3 <- tripdata_df%>%
+  left_join(locations_df, by = c("PULocationID" = "LocationID"))# First join for pickup location
+
+  
+tripdata_df_4 <- tripdata_df_3%>%
+  left_join(locations_df, by = c("DOLocationID" = "LocationID"), suffix = c("_pickup", "_dropoff"))
+
+
+head(tripdata_df_4)
+
+tripdata_df_5 <- tripdata_df_4%>%
+  filter(tip_amount>0)%>%
+  select(Borough_pickup, Borough_dropoff, Average_Household_Income_pickup, Average_Household_Income_dropoff)
+
+tripdata_df_4$Borough_dropoff <- as.factor(tripdata_df_4$Borough_dropoff)
+tripdata_df_4$Borough_pickup <- as.factor(tripdata_df_4$Borough_pickup)
+
+
+
+library(ggplot2)
+
+ggplot(tripdata_df_5, aes(x = Borough_pickup, fill = Borough_pickup)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.3) +
+  scale_fill_manual(values = c(
+    "Manhattan" = "lightblue",
+    "Brooklyn" = "lightpink",
+    "Queens" = "palegreen",
+    "Bronx" = "plum",
+    "Staten Island" = "lightyellow",
+    "Unknown" = "gray80",
+    "N/A" = "thistle"
+  )) +
+  labs(title = "Number of Trips by Pickup Borough",
+       x = "Pickup Borough",
+       y = "Count") +
+  theme_bw()
+
+
+ggplot(tripdata_df_5, aes(x = Borough_dropoff, fill = Borough_dropoff)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.3) +
+  scale_fill_manual(values = c(
+    "Manhattan" = "lightblue",
+    "Brooklyn" = "lightpink",
+    "Queens" = "palegreen",
+    "Bronx" = "plum",
+    "Staten Island" = "lightyellow",
+    "Unknown" = "gray80",
+    "N/A" = "thistle"
+  )) +
+  labs(title = "Number of Trips by Dropoff Borough",
+       x = "Dropoff Borough",
+       y = "Count") +
+  theme_bw()
+
+
+
+```
+
+**There are other variables that could be included to the project to predict the tip amount as for example the behaviour of the driver. In other words, a rating of the passenger explaining the behaviour of the driver (example, from 1-5 how good the driver drive or how nice was the ride in general). However, we don't have this data available so we won't be able to use it. Another good variable that we could use is peak hour/ off-peak hours. Does higher demand (peak-hour) indicate higher change to get a tip? We can also look into the day of the week. Do people tip more depending on the days of the week? Is the trip time distance a good variable?**
+
+
+```{r}
+
+tripdata_df_6 <- tripdata_df_4 %>%
+  filter(!is.na(lpep_pickup_datetime) & !is.na(lpep_dropoff_datetime))
+
+tripdata_df_6 <- tripdata_df_4 %>%
+  mutate(
+    lpep_pickup_datetime = as.POSIXct(lpep_pickup_datetime, format = "%Y-%m-%d %H:%M:%S"),
+    lpep_dropoff_datetime = as.POSIXct(lpep_dropoff_datetime, format = "%Y-%m-%d %H:%M:%S")
+  )
+
+head(tripdata_df_6)
+
+tripdata_df_7 <- tripdata_df_6 %>%
+  mutate(
+    trip_time_minutes = round(as.numeric(difftime(lpep_dropoff_datetime, lpep_pickup_datetime, units = "mins")),2)
+  )
+
+ggplot(tripdata_df_7, aes(x = trip_time_minutes, y = tip_amount)) +
+  geom_point(color = "blue") +  # Add points in blue
+  labs(title = "Trip Time vs Tip Amount", 
+       x = "Trip Time (Minutes)", 
+       y = "Tip Amount ($)") +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(0, max(tripdata_df_7$trip_time_minutes), by = 50)) 
+
+correlation <- cor(tripdata_df_7$trip_time_minutes, tripdata_df_7$tip_amount, use = "complete.obs")
+
+# Print the correlation result
+correlation
+```
+
+
+**We have observed that the correlation is very small, meaning that it won't be a good predictor variable. However, we can still included and look at the backfitting (p-values) of the data. However, We will have to remove the outliers first**
+
+<h5 style="color: #e6880f;">
+**Let's try to identify the Peak hour and Off-Peak now.**
+</h5>
+
+```{r}
+tripdata_df_8 <- tripdata_df_7 %>%
+  mutate(peak_offpeak = case_when(
+    # Morning Peak: 7:00 AM - 9:00 AM (exactly on the hour)
+    (hour(lpep_pickup_datetime) >= 7 & hour(lpep_pickup_datetime) < 9) ~ 1,  
+    
+    # Evening Peak: 4:00 PM - 7:00 PM (exactly on the hour)
+    (hour(lpep_pickup_datetime) >= 16 & hour(lpep_pickup_datetime) < 19) ~ 1,  
+    
+    # Off-Peak: Any other time
+    TRUE ~ 0  
+  ))
+
+tripdata_df_9 <- tripdata_df_8%>%
+  filter(tip_amount >0)
+
+library(ggplot2)
+
+ggplot(tripdata_df_9, aes(x = factor(peak_offpeak), fill = factor(peak_offpeak))) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.3, color = "black") +
+  scale_fill_manual(values = c("0" = "lightblue", "1" = "lightcoral")) +  
+  scale_x_discrete(labels = c("0" = "Peak", "1" = "Off-Peak")) +  
+  labs(
+    title = "Distribution of Peak and Off-Peak Hours",
+    x = "Peak/Off-Peak",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+
+```
+
+
+**That will be a good variable as well since we can see how during off-peak hours, there are more chances to geta  tip than during peak hours.**
+
+
+
+```{r}
+
+Sys.setlocale("LC_TIME", "en_US.UTF-8") # Setting the language to engflis. Changing the default language
+
+tripdata_df_10 <- tripdata_df_8%>%
+  mutate(lpep_pickup_datetime = as.POSIXct(lpep_pickup_datetime, format = "%m/%d/%Y %H:%M")) %>%
+  mutate(pickup_day_of_week = weekdays(lpep_pickup_datetime))
+
+tripdata_df_11 <- tripdata_df_10%>%
+  filter(tip_amount>0)
+
+
+
+library(ggplot2)
+
+# Convert pickup_day_of_week to a factor with ordered levels
+tripdata_df_11$pickup_day_of_week <- factor(
+  tripdata_df_11$pickup_day_of_week,
+  levels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+)
+
+ggplot(tripdata_df_11, aes(x = pickup_day_of_week, fill = pickup_day_of_week)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.3, color = "black") +  
+  scale_fill_manual(values = c(
+    "Friday" = "lightblue", 
+    "Monday" = "lightgreen", 
+    "Saturday" = "lightcoral", 
+    "Sunday" = "lightpink", 
+    "Thursday" = "khaki", 
+    "Tuesday" = "lightseagreen", 
+    "Wednesday" = "tan2"
+  )) +  # Different colors for each day
+  labs(
+    title = "Distribution of Trips by Day of the Week",
+    x = "Day of the Week",
+    y = "Count of Trips"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+This variable is also very interesting as it shows the distribution of days when tips are given. The day of the week on which a pickup occurs appears to influence the likelihood of receiving a tip from a passenger.
+
+
+
+**We have now identified the variables needed for our study. Irrelevant variables that do not contribute meaningful information for predicting tips have been removed. From the original 'lpep_pickup_datetime' and 'lpep_dropoff_datetime' columns, we have derived important features such as trip duration in minutes (calculated as the difference between pickup and drop-off times), a binary indicator for whether the pickup occurred during peak hours (1) or off-peak hours (0), and the day of the week of the pickup. Once we start with our analysis, we may detect that some of the variables can also be deleted but for now we don't have enough information to evaluate that.**
+
+```{r}
+tripdata_df_clean <- tripdata_df_10%>%
+  select(-VendorID, -store_and_fwd_flag, -PULocationID, -DOLocationID, -ehail_fee, -RatecodeID, -lpep_pickup_datetime, -lpep_dropoff_datetime)
+
+head(tripdata_df_clean)
+
+# Check the dimensions of the dataset
+cat("DataSet Size:", nrow(tripdata_df_clean), "\n")
+
+```
+
+**As shown in the tables above, the next steps would be handle the missing values, changing the data types and also dealing with the outliers.**
+
+
+<h2 style="color: #1F53B4;">
+**Question 2 — (20 points) : DATA PREPARATION**
+</h2>
+
+
+```{r}
+
+
+# Display the structure od the data 
+str(tripdata_df_clean)
+
+# Check missing values
+colSums(is.na(tripdata_df_clean))
+
+# Option: Remove rows where tip_amount or fare_amount is NA or 0
+tripdata_df_clean <- tripdata_df_clean %>%
+  filter(!is.na(tip_amount), tip_amount > 0, fare_amount > 0)
+
+```
+
+**We begin by removing anything obviously unusable, like the ehail_fee column—it’s completely empty and won’t help us.**
+**Then, we make sure to remove any rows where the tip amount is missing, because that’s the outcome we’re trying to predict. If we don’t know what the tip was, we can’t use that row to train the model.**
+
+```{r}
+
+# Tip Amount Histogram - Before Cleaning
+ggplot(tripdata_df, aes(x = tip_amount)) +
+  geom_histogram(binwidth = 2,fill = "darkgoldenrod3", color = "white") +
+  labs(title = "Tip Amount Distribution (Before Cleaning)",
+       x = "Tip Amount", y = "Count") +
+  theme_bw()
+
+
+```
+
+<h5 style="color: #e6880f;">
+**Tip Amount Histogram (Before Cleaning):**
+</h5>
+
+When we looked at the raw tip data, we saw tons of rides with no tips and a few with crazy high ones over $50.mIt was all over the place and didn’t really make sense for most normal rides. That’s when we knew we had to clean it up to get a more realistic picture.
+
+- Peak at 0: The first thing that stands out is the huge spike around $0. This likely indicates that there are a lot of zero or missing tip amounts in the dataset—perhaps due to data entry errors or customers who didn’t leave tips at all.
+
+- Small number of larger tips: The remaining tips above $0 are fewer and spread out. The distribution is heavily skewed toward the lower tip amounts.
+
+- Possible outliers: There are a few larger tip amounts, but they are very rare. This suggests there might be some outliers or anomalies in the data that don't represent typical tipping behavior.
+
+```{r}
+
+# Trip Distance Histogram - Before Cleaning
+ggplot(tripdata_df, aes(x = trip_distance)) +
+  geom_histogram(binwidth = 2, fill = "salmon", color = "white") +
+  labs(title = "Trip Distance Distribution (Before Cleaning)",
+       x = "Trip Distance", y = "Count") +
+  theme_bw()
+
+```
+
+
+<h5 style="color: #e6880f;">
+**Trip Distance Histogram (Before Cleaning):**
+</h5>
+
+Some rides had zero distance and others were way too long—like over 50 miles, which felt off for city trips. It looked like there were some errors, maybe from GPS issues or just bad data. So, we decided to clean it up and keep only the trips that made sense.
+
+- Peak at 0: Just like with tips, there's a massive spike at zero on the left, suggesting a large number of zero or very short trips—again, potentially due to missing data or errors.
+
+- Longer trips are rare: As the trip distance increases, the number of occurrences decreases rapidly. Distances of 10 units or more are quite rare.
+
+- Skewed distribution: This also shows a right-skewed distribution, where most trips are short, and longer trips are less common. The data needs some cleaning to remove the noise from these zero or extremely short trips.
+
+
+
+```{r}
+# Remove outliers based on tip and distance thresholds
+tripdata_df_clean <- tripdata_df_clean %>%
+  filter(tip_amount < 50, trip_distance > 0 & trip_distance < 50)
+
+# Remove all rows with any NA values
+tripdata_df_clean <- tripdata_df_clean %>% drop_na()
+
+colSums(is.na(tripdata_df_clean))
+
+head(tripdata_df_clean)
+
+# Check the dimensions of the dataset
+cat("DataSet Size:", nrow(tripdata_df_clean), "\n")
+
+```
+
+```{r}
+# Z-score normalization for continuous features
+tripdata_df_clean <- tripdata_df_clean %>%
+  mutate(
+    fare_amount_z = scale(fare_amount),
+    trip_distance_z = scale(trip_distance),
+    total_amount_z = scale(total_amount)
+  )
+
+```
+
+**In this step, we standardize our numeric features using R’s scale() function. That means we adjust each feature to have a mean of 0 and a standard deviation of 1.**
+
+```{r}
+tripdata_df_clean <- tripdata_df_clean %>%
+  mutate(
+    payment_type = as.factor(payment_type)
+  )
+
+
+# Select columns to encode
+categorical_cols <- c("Borough_pickup", "Borough_dropoff", "pickup_day_of_week")  # exclude payment_type
+one_hot_encoded <- model.matrix(~ Borough_pickup + Borough_dropoff + pickup_day_of_week, 
+                                data = tripdata_df_clean)[, -1]
+
+
+# Combine one-hot columns back with the original numeric dataset
+tripdata_encoded <- cbind(
+  tripdata_df_clean %>% select(-all_of(categorical_cols)),  # remove original categorical cols
+  one_hot_encoded  # add encoded columns
+)
+
+str(tripdata_encoded)
+
+head(tripdata_encoded)
+
+```
+
+
+**Machine learning models don’t understand text like “Cash” or “Credit Card”, so we convert these categories into numbers using one-hot encoding. This turns each category into its own column—if the row matches that category, we put a 1, otherwise a 0.**
+
+```{r}
+set.seed(123)  # for reproducibility
+
+# Shuffle the rows
+tripdata_encoded <- tripdata_encoded[sample(nrow(tripdata_encoded)), ]
+
+# 80% training, 20% testing
+train_index <- floor(0.8 * nrow(tripdata_encoded))
+
+data_train <- tripdata_encoded[1:train_index, ]
+data_test  <- tripdata_encoded[(train_index + 1):nrow(tripdata_encoded), ]
+
+# Check the dimensions of the dataset
+cat("DataSet Size:", nrow(tripdata_encoded), "\n")
+
+# Check the dimensions of the split
+cat("Training Set Size:", nrow(data_train), "\n")
+cat("Test Set Size:", nrow(data_test), "\n")
+
+```
+
+
+**Now that we’ve cleaned, fixed, and encoded everything, we combine the numeric and encoded features into one big dataset x, and our target variable (tip_amount) into y.**
+
+Then we shuffle the data (so the order doesn’t influence anything) and split it into training and test sets using an 80/20 ratio:
+
+	•	Training set (80%) is what the model learns from.
+	•	Test set (20%) is used later to see how well the model performs on new, unseen data.
+
+```{r}
+
+# Histogram AFTER cleaning
+ggplot(tripdata_df_clean, aes(x = tip_amount)) +
+  geom_histogram(binwidth = 2, fill = "lightseagreen", color = "white") +
+  labs(title = "Tip Amount Distribution (After Cleaning)",
+       x = "Tip Amount", y = "Count")+
+  theme_bw()
+
+
+```
+
+
+<h5 style="color: #e6880f;">
+**Tip Amount Histogram:(After Cleaning)**
+</h5>
+
+After cleaning the data by removing unusually high tips and missing values, we can see that most riders tend to tip small amounts. The tip amounts cluster around the lower end, showing that big tippers are pretty rare.
+
+- Most tips are clustered between $0 and $5, with a sharp peak likely around $2–$3.
+
+- The distribution is right-skewed, meaning there are fewer occurrences of higher tips.
+
+- A few tips go beyond $10, but they are very rare (outliers).
+
+- Data cleaning likely removed extreme outliers or zero tips due to data errors.
+
+```{r}
+
+# Histogram AFTER cleaning
+ggplot(tripdata_df_clean, aes(x = trip_distance)) +
+  geom_histogram(binwidth = 2, fill = "mediumpurple", color = "white") +
+  labs(title = "Trip Distance Distribution (After Cleaning)",
+       x = "Trip Distance",y = " Count")+
+  theme_bw()
+
+```
+
+
+<h5 style="color: #e6880f;">
+**Trip Distance Histogram (After Cleaning):**
+</h5>
+This chart shows how far people usually travel in their rides after cleaning out extreme values. Most trips are on the shorter side, with fewer people taking longer rides—makes sense in a busy city where short commutes are common!
+
+- Most trips are short, typically under 5 units in distance.
+
+- There is a peak around 1–2 units.
+
+- Similar to tip amount, this is also right-skewed with some longer trips, but they happen much less often.
+
+- The longest trips in this cleaned dataset go up to around 30 units, but these are rare.
+
+
+
+<h2 style="color: #1F53B4;">
+**Question 3 — (30 points): MODELING**
+</h2>
+
+
+```{r}
+# Load required package
+library(FNN)  # For knn.reg()
+
+# Define the k-NN regression prediction function
+knn.predict <- function(data_train, data_test, k) {
+  # Ensure tip_amount is numeric
+  data_train$tip_amount <- as.numeric(data_train$tip_amount)
+  data_test$tip_amount <- as.numeric(data_test$tip_amount)
+
+  # ---- 1. Separate predictors and target ----
+  x_train <- data_train %>%
+    select(-tip_amount) %>%
+    select(where(is.numeric))  # keep only numeric predictors
+
+  y_train <- data_train$tip_amount
+
+  x_test <- data_test %>%
+    select(-tip_amount) %>%
+    select(where(is.numeric))  # keep only numeric predictors
+
+  y_test <- data_test$tip_amount
+
+  # ---- 2. Run k-NN regression ----
+  knn_model <- knn.reg(train = x_train, test = x_test, y = y_train, k = k)
+
+  # ---- 3. Extract predictions and calculate MSE ----
+  predictions <- knn_model$pred
+  mse <- mean((predictions - y_test)^2)
+
+  # ---- 4. Return MSE ----
+  return(mse)
+}
+
+
+```
+
+
+
+```{r}
+# Run k-NN with k = 5
+mse_k5 <- knn.predict(data_train, data_test, k = 5)
+head(mse_k5)
+```
+
+
+**The Mean Squared Error (MSE) of the k-NN regression model with k = 5 is approximately 1.80. This value represents the average squared difference between the actual and predicted tip amounts. While an MSE of 1.80 indicates that predictions are generally close to actual values, it also suggests that on average, there can be a noticeable deviation — particularly in higher tip amounts as seen in the scatterplot below.**
+
+
+
+```{r}
+# Prepare the data exactly as in knn.predict() to extract the prediction values alone
+x_train <- data_train %>%
+  select(-tip_amount) %>%
+  select(where(is.numeric))
+y_train <- data_train$tip_amount
+
+x_test <- data_test %>%
+  select(-tip_amount) %>%
+  select(where(is.numeric))
+y_test <- data_test$tip_amount
+
+# Run k-NN regression manually
+k_value <- 5
+knn_model <- knn.reg(train = x_train, test = x_test, y = y_train, k = k_value)
+
+# Extract predictions
+predictions <- knn_model$pred
+predictions
+
+```
+
+
+```{r}
+
+results_df <- data.frame(
+  Actual = y_test,
+  Predicted = predictions,
+  Residuals = predictions - y_test
+)
+
+
+library(ggplot2)
+
+ggplot(results_df, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = paste("Actual vs Predicted Tip Amounts (k =", k_value, ")"),
+    x = "Actual Tip Amount",
+    y = "Predicted Tip Amount"
+  ) +
+  theme_bw()
+
+
+```
+
+
+<h5 style="color: #e6880f;">
+**The "Actual vs Predicted Tip Amounts" plot with k = 5 from the k-NN regression model shows how well the model is performing.**
+</h5>
+
+The scatterplot comparing actual vs. predicted tip amounts for k = 5 provides valuable insight into the performance of our k-NN regression model. The majority of data points cluster closely around the diagonal reference line, suggesting that the model performs well for predicting lower to moderate tip amounts, which constitute most of the dataset. However, as tip amounts increase, the prediction error becomes more noticeable, with several outliers deviating significantly from the expected trend. These discrepancies are likely due to the sparsity of high-tip data points, which poses a challenge for instance-based models like k-NN. Overall, while the model demonstrates acceptable accuracy for common scenarios, its performance diminishes for less frequent, higher-tip cases. Further tuning of the k value and incorporating additional feature engineering or outlier handling could potentially enhance predictive accuracy.
+
+
+```{r}
+
+# Plot Histogram of Residuals
+ggplot(results_df, aes(x = Residuals)) +
+  geom_histogram(binwidth = 0.5, fill = "salmon", color = "black", alpha = 0.6) +
+  labs(
+    title = "Histogram of Residuals",
+    x = "Residuals (Predicted - Actual)",
+    y = "Frequency"
+  ) +
+  theme_bw()
+
+```
+
+
+<h5 style="color: #e6880f;">
+**Residuals**
+</h5>
+
+Residuals are the differences between the actual values and the predicted values produced by a model. In simpler terms, they represent the error or prediction error of the model for each data point. Residuals help us understand how well a model fits the data.
+
+
+<h5 style="color: #e6880f;">
+**Key Observations:**
+</h5>
+
+- **Peak Around Zero:** The histogram has a sharp peak near 0 on the x-axis, suggesting that most of the predictions are very close to the actual values.
+
+-  **Spread of Residuals:** The spread of residuals on either side of zero is not too large. The histogram tailing off towards the positive and negative values implies that there are some instances where the model's predictions are off by a larger amount, but these are not as frequent.
+
+
+
+<h5 style="color: #e6880f;">
+**Interpretation:**
+</h5>
+
+
+- **Good Model Fit:** The fact that the residuals are clustered around zero suggests that the k-NN regression model is performing well for the majority of the data, with a small number of outliers.
+
+- **Small Variance:** The distribution appears to be relatively narrow, indicating that the model is consistent in its predictions for most of the data.
+
+- **Potential Outliers:** The presence of some large residuals may suggest that there are certain instances where the model struggles to predict the tip amount accurately, possibly due to unusual or rare data points.
+
+
+
+<h2 style="color: #1F53B4;">
+**Question 4 — (30 points): EVALUATION**
+</h2>
+
+
+```{r evaluation-knn, warning=FALSE, message=FALSE}
+
+# Define a range of k values from 1 to 40 (or 1 to 20 if strictly 20 values required)
+k_values <- 1:20
+
+# Empty vector to store MSE for each k
+mse_values <- numeric(length(k_values))
+
+# Loop through each k, call knn.predict(), and store the MSE
+for (i in seq_along(k_values)) {
+  mse_values[i] <- knn.predict(data_train, data_test, k = k_values[i])
+}
+
+# Combine into a dataframe for plotting
+mse_df <- data.frame(
+  k = k_values,
+  MSE = mse_values
+)
+
+mse_df
+
+# Plot the MSE vs k values
+library(ggplot2)
+
+ggplot(mse_df, aes(x = k, y = MSE)) +
+  geom_line(color = "salmon", size = 1) +
+  geom_point(color = "blue") +
+  scale_x_continuous(breaks = seq(min(mse_df$k), max(mse_df$k), by = 2)) +
+  labs(
+    title = "K vs Mean Squared Error",
+    x = "Number of Neighbors (k)",
+    y = "Mean Squared Error"
+  ) +
+  theme_bw()
+
+```
+
+<h5 style="color: #e6880f;">
+**Explanation of the Chart and Best Value of k:**
+</h5>
+
+
+The chart displays the relationship between the number of neighbors (k) and the corresponding mean squared error (MSE) in the K-Nearest Neighbors model. Initially, the MSE drops sharply from k = 1 to k = 3, where it reaches the lowest point. After this, there is a significant spike in error at k = 5, followed by a gradual decrease and fluctuations as k increases. Based on this trend, k = 3 is the most suitable choice because it yields the lowest MSE, indicating the most accurate prediction performance for the given dataset. Choosing a higher k smooths predictions but can increase bias, while too small a k risks overfitting. Therefore, k = 3 offers the best balance in this case.
+
+
+<h5 style="color: #e6880f;">
+**Thoughts on the model that we developed and the accuracy of its predictions and advocate for its use to predict the tip amount of future trips:**
+</h5>
+
+Based on the results and the MSE trend across different values of k, the K-Nearest Neighbors (KNN) model demonstrates reasonable predictive performance. The lowest MSE is achieved at k = 3 with a value of approximately 0.781, suggesting that the model performs best at this setting. However, we observe significant variability in error values, especially a spike at k = 5, indicating sensitivity to parameter choice. While the overall MSE values remain moderate beyond k = 3, they do not significantly outperform the minimum. This shows that the model captures patterns in the data but may not generalize well under all conditions due to its non-parametric nature and reliance on distance metrics. Given these observations, I would recommend cautious use of the KNN model for predicting tip amounts in future trips. It may serve well in situations with similar data characteristics but might not perform reliably on unseen or differently distributed datasets. Further validation and comparison with alternative models like decision trees or linear regression could strengthen confidence in its predictive capabilities.
+
+
+
+<h2 style="color: #1F53B4;">
+**Question 5 — (10 optional/ bonus points)**
+</h2>
+
+```{r, fig.width=10, fig.height=6}
+
+
+# Custom Bright Pastel Colors
+bright_pastel_colors <- c(
+  "Bronx" = "#77DD77",     
+  "Brooklyn" = "#779ECB",  
+  "Manhattan" = "#FFD580", 
+  "Queens" = "#FF6961"     
+)
+
+ggplot(tripdata_df_clean, aes(x = Borough_pickup)) +
+  
+  geom_bar(aes(fill = Borough_pickup), show.legend = FALSE, width = 0.6) +
+  
+  scale_fill_manual(values = bright_pastel_colors) +
+  
+  # Micro-insights for each Borough
+  annotate("text", x = 1, y = 50, label = "Lowest Taxi Usage", size = 4, fontface = "bold", color = "#145A32") +
+  annotate("text", x = 2, y = 500, label = "Residential + Local Commutes", size = 4, fontface = "bold", color = "#154360") +
+  annotate("text", x = 3, y = 650, label = "Business, Tourists & Nightlife", size = 4, fontface = "bold", color = "#7D6608") +
+  annotate("text", x = 4, y = 400, label = "Airport Driven Demand", size = 4, fontface = "bold", color = "#7B241C") +
+  
+  # Main Title & Subtitle
+  labs(
+    title = "NYC Taxi Ride Culture: Where City Meets Speed & Demand",
+    subtitle = "Taxi demand mirrors urban lifestyle — Manhattan dominates for its business, tourism, and 24x7 movement",
+    x = "Pickup Borough",
+    y = "Number of Pickups",
+    caption = "Source: NYC Green Taxi Trip Data"
+  ) +
+  
+  theme_bw(base_size = 12) +
+  
+  theme(
+    plot.title = element_text(face = "bold", size = 18, color = "#2C3E50"),
+    plot.subtitle = element_text(size = 12, color = "#7F8C8D", margin = margin(b = 10)),
+    axis.title = element_text(face = "bold", color = "#2C3E50"),
+    axis.text = element_text(color = "#2C3E50"),
+    panel.grid.major = element_line(color = "gray85"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, color = "gray50", hjust = 1)
+  )
+
+```
+
+
+<h5 style="color: #e6880f;">
+**Taxi Usage Across NYC Boroughs:**
+</h5>
+
+The chart highlights the varying taxi demand across NYC’s boroughs, showing how each borough has different usage patterns based on local needs:
+
+**Manhattan** leads with the highest number of taxi pickups, driven by business, tourism, and nightlife. This reflects Manhattan's role as the city’s economic and cultural hub, where taxis serve both local residents and visitors.
+
+**Brooklyn** shows significant taxi usage primarily for residential and local commuting. People in Brooklyn use taxis for their day-to-day needs, such as going to work or running errands, making it the second most active borough for taxi demand.
+
+**Queens** sees taxi demand driven largely by airport travel, with people needing rides to and from JFK and LaGuardia airports. This highlights the borough’s critical role in air travel, where taxis are a convenient way to get to and from the airports.
+
+**The Bronx** has the lowest taxi usage, which suggests that people in the Bronx may rely more on public transportation or personal vehicles, as taxis are not the primary mode of transport.
+
+
+<h5 style="color: #e6880f;">
+**What This Tells Us About NYC's Taxi Culture:**
+</h5>
+
+**Manhattan's Taxi Dependence:** The dominance of Manhattan in taxi usage highlights its pivotal role in the city's economy, culture, and tourism. Taxis here cater to both everyday needs and visitors from all around the world, making them a crucial part of NYC's transportation ecosystem.
+
+**Local vs. Tourist Demand:** Boroughs like Brooklyn and Queens have a more localized demand. While Brooklyn taxis are primarily used for commuting and residential needs, Queens caters significantly to tourists and travelers heading to the airports. These boroughs show how taxis are tailored to serve different local lifestyles.
+
+**Public vs. Private Transportation:** The contrast between the Bronx and other boroughs could suggest a preference for alternative transportation options in less central areas, where taxis aren't the primary mode of travel.
+
+
+
+```{r}
+library(ggtext)
+
+# Your Data
+mse_split_df <- data.frame(
+  Split_Percentage = c(0.5, 0.6, 0.7, 0.8, 0.9),
+  MSE = c(3.19, 3.3, 0.88, 0.78, 1.00)
+)
+
+ggplot(mse_split_df, aes(x = Split_Percentage, y = MSE)) +
+  
+  # Background Shading
+  annotate("rect", xmin = 0.5, xmax = 0.65, ymin = -Inf, ymax = Inf, alpha = 0.1, fill = "#E74C3C") +
+  annotate("rect", xmin = 0.66, xmax = 0.85, ymin = -Inf, ymax = Inf, alpha = 0.1, fill = "#27AE60") +
+  
+  # Line & Points
+  geom_line(color = "#2980B9", size = 1.5) +
+  geom_point(size = 5, shape = 21, fill = "#1ABC9C", color = "black") +
+  geom_text(aes(label = round(MSE, 2)), vjust = -1.2, size = 4, fontface = "bold", color = "#2C3E50") +
+  
+  # Labels for Zones
+  annotate("text", x = 0.56, y = 3.5, label = "Undertrained", color = "#C0392B", size = 4, fontface = "bold") +
+  annotate("text", x = 0.75, y = 2.5, label = "Optimal Zone", color = "#145A32", size = 4, fontface = "bold") +
+  annotate("text", x = 0.87, y = 1.6, label = "Slight Overfitting →", color = "#CA6F1E", size = 4.2, angle = 10) +
+  
+  # Labels
+  labs(
+    title = "Sweet Spot in Learning: Train/Test Split vs MSE",
+    subtitle = "KNN performs best when trained on 70–80% of data — too little leads to underfitting",
+    x = "Training Data Percentage",
+    y = "Mean Squared Error (MSE)",
+    caption = "Source: NYC Green Taxi Trip Data | Model: k-Nearest Neighbors"
+  ) +
+  
+  theme_bw(base_family = "Arial", base_size = 13) +
+  
+  theme(
+    plot.title = element_text(face = "bold", size = 18, color = "#2C3E50"),
+    plot.subtitle = element_text(size = 12, color = "#7F8C8D", margin = margin(b = 10)),
+    axis.title = element_text(face = "bold", color = "#2C3E50"),
+    panel.grid.major = element_line(color = "gray85"),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, hjust = 1, color = "gray40"),
+    axis.text = element_text(color = "#2C3E50")
+  )
+
+```
+
+
+**The graph explores the relationship between the percentage of data used for training (versus testing) and the model's Mean Squared Error (MSE) in the context of the k-Nearest Neighbors (k-NN) regression model. The goal is to find the optimal train/test split that minimizes prediction error while avoiding overfitting or underfitting.**
+
+
+
+
+
+<h5 style="color: #e6880f;">
+1. **Undertraining Zone:**
+</h5>
+
+The graph shows that when less than 70% of the data is used for training, the model’s MSE remains high (around 3.19).
+
+This indicates underfitting, where the model is not able to learn enough from the data to make accurate predictions. When too little data is used for training, the model doesn't have enough information to capture the underlying patterns of the dataset.
+
+**Effect of undertraining:** The model performs poorly because it doesn’t have sufficient data to learn complex relationships, resulting in high MSE.
+
+<h5 style="color: #e6880f;">
+2. **Optimal Zone:**
+</h5>
+
+As we increase the percentage of training data to around 70-80%, we enter the optimal zone where the MSE decreases significantly, reaching its lowest point at 0.78.
+
+In this zone, the model is able to learn enough from the data without being overwhelmed by too much noise or overfitting. The model’s predictions improve, as it finds the right balance between learning from data and not overfitting to it.
+
+**Effect of optimal training:** With a 70-80% train/test split, the k-NN model is at its best, providing accurate and reliable predictions, which helps make the model more generalized and robust.
+
+<h5 style="color: #e6880f;">
+3. **Overfitting Zone:**
+</h5>
+
+As we approach 90% or more of the data used for training, the model’s MSE starts to increase again to 0.88.
+
+This is indicative of slight overfitting. Here, the model has learned the training data too well, even capturing the noise and outliers. This causes it to perform less well on the test set since it has become too specialized to the training data.
+
+**Effect of overfitting:** While more data can theoretically improve the model’s performance, too much training data relative to testing data can make the model too sensitive to the training set, thus diminishing its ability to generalize effectively.
+
+
